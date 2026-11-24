@@ -21,7 +21,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync,
+  closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync, writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -38,6 +38,7 @@ const KILL_GRACE_MS = 10_000;
 const STDERR_TAIL_CHARS = 500;
 // spawnSync's default of 1 MB is less than `git status` prints for a few thousand untracked files.
 const GIT_OUTPUT_LIMIT_BYTES = 256 * 1024 * 1024;
+const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
 
 function fail(message) {
   console.error(`codex-seat: ${message}`);
@@ -96,13 +97,38 @@ function git(dir, args) {
   return run.status === 0 ? run.stdout : null;
 }
 
+// Read in chunks: Node refuses to read a file of 2 GiB or more in one call.
 function contentHash(path) {
   if (!statSync(path, { throwIfNoEntry: false })?.isFile()) return "absent";
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  let fd;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return "unreadable";
+  }
+  const hash = createHash("sha256");
+  const chunk = Buffer.allocUnsafe(HASH_CHUNK_BYTES);
+  try {
+    for (let read = readSync(fd, chunk); read > 0; read = readSync(fd, chunk)) hash.update(chunk.subarray(0, read));
+  } finally {
+    closeSync(fd);
+  }
+  return hash.digest("hex");
+}
+
+// git runs here on the host, outside the seat's sandbox, and `git status`
+// starts the fsmonitor and filter programs that git config names. Such a
+// program can be a script inside the checkout, which a seat can edit, so
+// status runs with all of them switched off.
+function configuredProgramsOff(checkout) {
+  const configured = git(checkout, ["config", "--null", "--get-regexp", "^filter\\..*\\.(clean|smudge|process|required)$"]) ?? "";
+  const keys = configured.split("\0").filter(Boolean).map((entry) => entry.split("\n")[0]);
+  const filtersOff = keys.flatMap((key) => ["-c", key.endsWith(".required") ? `${key}=false` : `${key}=`]);
+  return ["-c", "core.fsmonitor=false", ...filtersOff];
 }
 
 function uncommittedFiles(checkout) {
-  const status = git(checkout, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const status = git(checkout, [...configuredProgramsOff(checkout), "status", "--porcelain=v1", "-z", "--untracked-files=all"]);
   if (status === null) throw new Error(`git status failed in ${checkout}`);
 
   const stateOf = new Map();
