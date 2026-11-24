@@ -14,7 +14,7 @@ A role value names a seat as `<seat> <model> <effort>`, such as `codex gpt-6.2-a
 
 | Seat | Script | Needs |
 | --- | --- | --- |
-| `codex` | `scripts/codex-seat.mjs` | `codex` on PATH and signed in. Check with `codex --version`. |
+| `codex` | `scripts/codex-seat.mjs` | `codex` on PATH, signed in, and allowed to run the model. Check with `codex exec --model <model> --config model_reasoning_effort="<effort>" --sandbox read-only --skip-git-repo-check --ephemeral "Reply with exactly: OK" < /dev/null`, which exits 0 when all three hold. Keep the `< /dev/null`: with an open stdin Codex waits for more prompt and never returns. |
 
 A seat value whose seat is not in this table has no script yet. Drop that seat, keep the rest of the panel, and say so.
 
@@ -38,7 +38,7 @@ A seat value whose seat is not in this table has no script yet. Drop that seat, 
 | --- | --- |
 | `completed` | The seat finished its turn. When it is false, treat the seat as a dropout, proceed with the others, and say so. A completed turn can still say "I could not do this", so read the report. |
 | `exitCode` | 0 only when the seat completed and left a report. 124 means the timeout stopped it. |
-| `notices` | What the seat's CLI reported: warnings, a rerouted model, a refused model, an account out of usage. A healthy run can have entries, so judge the run by `completed` and the report. |
+| `notices` | What the seat's CLI reported: warnings, a rerouted model, a refused model, an account out of usage. A healthy run can have entries. Accept a seat's result only when `exitCode` is 0, `completed` is true, and `report` points to a file. |
 | `report` | The path of the seat's final message, or null when there is none to trust. |
 | `changedFiles` | Every uncommitted path git reports whose status or content changed during the run, whoever changed it. Ignored files, such as build output or `.env`, are not listed. Null when git could not list them. |
 | `uncommittedBefore` | Paths that were already uncommitted when the run started. |
@@ -46,7 +46,7 @@ A seat value whose seat is not in this table has no script yet. Drop that seat, 
 | `usage` | The tokens the run spent. |
 | `threadId` | The seat's session, for finding its transcript under the vendor's home folder. |
 
-You own the seat's work, as you own any subagent's. Read its diff with `git -C <worktree> diff` and write your own summary.
+You own the seat's work, as you own any subagent's. Read its diff with `git -C <worktree> diff HEAD`, open the new files that `changedFiles` lists, because a diff leaves out untracked files, and write your own summary.
 
 ## What a codex seat can do
 
@@ -59,7 +59,8 @@ Each line was measured with codex-cli 0.169.0 on Linux, using the sandbox helper
 - The script turns off the connected apps, plugins, browser, desktop control, and image generation that Codex otherwise gives a worker from the signed-in account. Those act outside the sandbox. A connected GitHub or Notion account is among them.
 - The script turns off its tools for starting other Codex agents.
 - It reads the `AGENTS.md` files from the repository root down to the worktree, and an `AGENTS.md` in the Codex home folder. It does not read `CLAUDE.md`. The script makes it ignore the user's Codex `config.toml` and rule files, so the model and effort you pass are the ones requested, no MCP server from that file starts, and no allow rule lets a command out of the sandbox. A repository's own `.codex/` config and hooks do not load in a seat either, even when the user trusted that repository, because the trust is saved in the user's `config.toml`.
-- Codex can reroute a run to another model. When it does, `errors` in the result says so.
+- Codex can reroute a run to another model. When it does, `notices` in the result says so.
 - It never asks a person a question. A command the sandbox refuses fails and the run goes on.
+- A machine-wide Codex config, such as `/etc/codex/config.toml`, still applies, MCP servers included. The script cannot turn that layer off, so read it on a machine that has one.
 - Each run leaves a session record that holds the brief in the Codex home folder.
 - Each running seat held about 0.25 GB of memory, which bounds how many run at once on a small machine.

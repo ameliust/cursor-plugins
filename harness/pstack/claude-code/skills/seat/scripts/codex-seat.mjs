@@ -19,6 +19,7 @@
 // left a report, 124 on timeout, 2 on a usage error.
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync,
 } from "node:fs";
@@ -90,13 +91,14 @@ function isInside(parent, child) {
   return !climbsOut && !isAbsolute(path);
 }
 
-function git(dir, args, input) {
-  const run = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", input, maxBuffer: GIT_OUTPUT_LIMIT_BYTES });
+function git(dir, args) {
+  const run = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", maxBuffer: GIT_OUTPUT_LIMIT_BYTES });
   return run.status === 0 ? run.stdout : null;
 }
 
-function isRegularFile(path) {
-  return statSync(path, { throwIfNoEntry: false })?.isFile() ?? false;
+function contentHash(path) {
+  if (!statSync(path, { throwIfNoEntry: false })?.isFile()) return "absent";
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function uncommittedFiles(checkout) {
@@ -112,12 +114,7 @@ function uncommittedFiles(checkout) {
     if (state[0] === "R" || state[0] === "C") i++;
   }
 
-  const hashable = [...stateOf.keys()].filter((path) => isRegularFile(join(checkout, path)));
-  const hashes = hashable.length > 0 ? git(checkout, ["hash-object", "--stdin-paths"], `${hashable.join("\n")}\n`) : "";
-  if (hashes === null) throw new Error(`git hash-object failed in ${checkout}`);
-  const hashOf = new Map(hashes.split("\n").map((hash, i) => [hashable[i], hash]));
-
-  return new Map([...stateOf].map(([path, state]) => [path, `${state} ${hashOf.get(path) ?? "absent"}`]));
+  return new Map([...stateOf].map(([path, state]) => [path, `${state} ${contentHash(join(checkout, path))}`]));
 }
 
 function pathsThatDiffer(before, after) {
@@ -134,6 +131,7 @@ function codexArgs(seat, reportPath) {
     "--config", `model_reasoning_effort="${seat.effort}"`,
     "--config", "sandbox_workspace_write.network_access=false",
     "--config", "agents.enabled=false",
+    "--disable", "multi_agent_v2",
     ...(seat.webSearch === "off" ? ["--config", 'web_search="disabled"'] : []),
     "--ignore-user-config",
     "--ignore-rules",
