@@ -1,6 +1,6 @@
 ---
 name: seat
-description: "Run a worker on another vendor's model through that vendor's own CLI, for a harness whose subagent tool takes only one vendor's models. Use for /seat, or when a role value names a seat, such as `codex gpt-6.2-astra high`."
+description: "Run a worker on another vendor's model through that vendor's own CLI, for a harness whose subagent tool takes only one vendor's models. Use for /seat, or when a role value names a seat, such as `codex gpt-6.2-astra high` or `gemini gemini-4-hydrogen high`."
 disable-model-invocation: true
 ---
 
@@ -10,11 +10,12 @@ A seat is a worker that runs in another vendor's harness. It gives a panel a sec
 
 A role value names a seat as `<seat> <model> <effort>`, such as `codex gpt-6.2-astra high`. The seat name is the vendor for every vendor check, such as the arena cross-judge rule.
 
-| Seat | Script | Needs |
+| Seat | Runs | Needs |
 | --- | --- | --- |
-| `codex` | `scripts/codex-seat.mjs` | `codex` on PATH and signed in. |
+| `codex` | OpenAI's Codex CLI | `codex` on PATH and signed in. |
+| `gemini` | Google's Antigravity CLI | `agy` on PATH and signed in. `agy models` lists the model names. |
 
-A seat value whose seat is not in this table has no script yet. Drop that seat, keep the rest of the panel, and say so.
+A seat value whose seat is not in this table cannot run yet. Drop that seat, keep the rest of the panel, and say so.
 
 ## Run a seat
 
@@ -23,7 +24,7 @@ A seat value whose seat is not in this table has no script yet. Drop that seat, 
 3. Start the script in the background with your shell tool, one call per seat, so that you are told when it ends:
 
    ```bash
-   node <this folder>/scripts/codex-seat.mjs --worktree <dir> --brief <file> --out <new dir> \
+   node <this folder>/scripts/seat.mjs --seat <seat> --worktree <dir> --brief <file> --out <new dir> \
      --model <model> --effort <effort> [--mode write|read] [--timeout-min <minutes>]
    ```
 
@@ -43,9 +44,13 @@ A seat value whose seat is not in this table has no script yet. Drop that seat, 
 
 You own the seat's work, as you own any subagent's. Read what it changed with `git -C <worktree> status` and `git -C <worktree> diff`, and write your own summary.
 
-## What to expect from a codex seat
+## What to expect
 
-Seen with codex-cli 0.169.0 on Linux. These describe how it behaved, so a lead knows what to plan for. They are not guarantees.
+These describe how each seat behaved, so a lead knows what to plan for. They are not guarantees.
+
+### codex
+
+Seen with codex-cli 0.169.0 on Linux.
 
 - It runs with the user's own Codex setup: their config, the repository's `AGENTS.md`, and the repository's `.codex/` config and hooks when the user trusted that repository. It does not read `CLAUDE.md`.
 - The script turns off the connected apps and plugins of the signed-in account, such as GitHub and Notion, because those act as the account's owner outside the worktree. Everything else is as Codex ships it, web search included.
@@ -53,3 +58,13 @@ Seen with codex-cli 0.169.0 on Linux. These describe how it behaved, so a lead k
 - In `read` mode its commands could not write at all, temp folders included, so a test suite that writes a cache fails there.
 - Its commands had no network in either mode.
 - It never asks a person a question. A command the sandbox refuses fails and the run goes on.
+
+### gemini
+
+Seen with agy 1.5.16 on Linux.
+
+- It runs with the user's own Antigravity setup. No connected app, plugin or MCP server was configured, so the script turns nothing off. If the user adds one, a seat gets it.
+- It has web search and tools for starting other agents.
+- In `write` mode it edited files in the worktree and ran the tests there. A write outside the worktree needs a permission that a headless run cannot ask for. The run then ends with no report, and `notices` says which permission was missing.
+- It reads only inside its worktree. Reading another folder needs a permission a headless run cannot ask for, and the run ends with no report. For a judge, point `--worktree` at a folder that holds every candidate.
+- `read` mode asks for its plan mode. Whether that stops a write was not measured, so tell a judge in the brief to change nothing.

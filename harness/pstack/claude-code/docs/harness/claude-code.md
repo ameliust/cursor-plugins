@@ -33,7 +33,7 @@ pstack skills use Cursor names. In Claude Code, read this file once per session,
 | Cursor | Claude Code |
 | --- | --- |
 | `claude-<family>-<version>-<effort>[-fast]`, such as `claude-opus-5-5-xhigh` | `model: "opus"` and `effort: "xhigh"`. `model` takes only `opus`, `sonnet`, `haiku`, `fable`. Drop `-fast`. |
-| A role value that starts with a seat name, such as `codex gpt-6.2-astra high` | Do not call `Agent` for it. Run that worker through the seat skill: `Read` `<pstack>/skills/seat/SKILL.md` and follow it. |
+| A role value that starts with a seat name, such as `codex gpt-6.2-astra high` or `gemini gemini-4-hydrogen high` | Do not call `Agent` for it. Run that worker through the seat skill: `Read` `<pstack>/skills/seat/SKILL.md` and follow it. |
 | A `gemini-*` or other non-Claude slug with no seat | Omit `model` so the agent runs on the session model, and say so. |
 | `auto` or `inherit-parent` | Omit `model`. |
 | The `pstack-models.mdc` rule, `~/.cursor/rules/pstack-models.mdc` | `~/.claude/rules/pstack-models.md`. Claude Code loads it into every new session, so its role lines are already in context. If they are not, read the file. If the file or the role's line is missing, use the skill's default slug. |
